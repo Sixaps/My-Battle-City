@@ -30,7 +30,8 @@ io.on('connection', function (socket) {
       if(status[socket.room][key] === false)
         return;
     }
-    intervals[socket.room] = setInterval(()=>{sync_cond(socket.room)},1000);
+    sync_cond(socket.room)
+    // intervals[socket.room] = setInterval(()=>{sync_cond(socket.room)},1000);
   });
 
   socket.on('join', function (msg) {
@@ -65,29 +66,30 @@ io.on('connection', function (socket) {
   });
 
   socket.on('tank_move', function (msg) {
-    console.log(msg);
     io.to(socket.room).emit('tank_move', msg);
   });
   socket.on('tank_fire', function (msg) {
-    console.log(msg);
     io.to(socket.room).emit('tank_fire', msg);
   });
   socket.on('disconnect', function () {
     if (users[socket.room] && users[socket.room].hasOwnProperty(socket.name)) {
       delete users[socket.room][socket.name];
-      delete status[socket.room][socket.name];
-      delete tanks[socket.room][socket.name];
       console.log(socket.name + '退出了' + socket.room + "房间");
       console.log("房间当前成员:" + Object.keys(users[socket.room]));
       console.log("共"+ Object.keys(users[socket.room]).length + "人");
       socket.leave(socket.room)
     }
+    if (tanks[socket.room] && tanks[socket.room].hasOwnProperty(socket.name)) {
+      delete tanks[socket.room][socket.name];
+      delete status[socket.room][socket.name];
+    }
   });
 
   socket.on('gameOver',function(msg){
-    clearInterval(intervals[socket.room])
+    clearInterval(intervals[socket.room]);
     delete tanks[socket.room];
     delete status[socket.room];
+    delete users[socket.room];
   })
 });
 
@@ -96,6 +98,7 @@ http.listen(3000, function () {
 });
 
 function sync_cond(room){
+  console.log(tanks[room]);
   io.to(room).emit('sync_cond', tanks[room]);
 }
 

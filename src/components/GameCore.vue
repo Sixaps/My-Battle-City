@@ -10,6 +10,9 @@
       <mu-flex class="select-control-row">
         <mu-switch v-model="isHost" label="是否房主"></mu-switch>
       </mu-flex>
+      <mu-select label="请选择地图" v-model="map" full-width v-if="isHost">
+        <mu-option v-for="option,index in mapOptions" :key="option" :label="option" :value="option"></mu-option>
+      </mu-select>
       <mu-button slot="actions" flat color="primary" @click="closeSimpleDialog">开始游戏</mu-button>
     </mu-dialog>
     <mu-flex style="margin: 16px 0;" v-if="isLoading">
@@ -29,6 +32,10 @@
     name: "gameCore",
     data() {
       return {
+        mapOptions: [
+          'map1', 'map2'
+        ],
+        map: "map1",
         loadingValue: 0,
         isLoading: false,
         isHost: false,
@@ -88,16 +95,18 @@
         tank.ammunition = msg.ammunition;
         tank.name = msg.name;
         tank.bulletType = msg.bulletType;
-        if(msg.team !== this.team) {
+        if (msg.team !== this.team) {
           console.log("reverse xy:" + msg.x + "," + msg.y);
-          tank.y = this.gameContainer._height*(1 - msg.y);
-          tank.x = this.gameContainer._width*(1 - msg.x);
+          tank.y = this.gameContainer._height * (1 - msg.y);
+          tank.x = this.gameContainer._width * (1 - msg.x);
         }
-        else{
+        else {
           console.log("receive xy:" + tank.x + "," + tank.y)
-          tank.y = this.gameContainer._height*msg.y;
-          tank.x = this.gameContainer._width*msg.x;
+          tank.y = this.gameContainer._height * msg.y;
+          tank.x = this.gameContainer._width * msg.x;
         }
+        tank.initX = tank.x;
+        tank.initY = tank.y;
       },
       fire: function (tank) {
         // console.log(tank.team);
@@ -108,6 +117,7 @@
           bullet.anchor.set(0.5, 0.5);
           bullet.level = tank.bulletType;
           bullet.team = tank.team;
+          tank.ammunition -= 1;
           bullet.Hit = () => {
             this.BulletHit(bullet)
           };
@@ -141,14 +151,14 @@
               bullet.vx = 0;
               bullet.vy = tank.speed * 1.5;
               bullet.x = tank.x;
-              bullet.y = tank.y + this.BlockUnit*2;
+              bullet.y = tank.y + this.BlockUnit * 2;
           }
           this.BulletSprite.addChild(bullet)
         }
       },
       InitMap: function (json) {
         this.texture = this.resources.Sprites.textures;
-        if(this.texture === undefined)
+        if (this.texture === undefined)
           return;
         let map = json.map;
         let users = json.users;
@@ -164,7 +174,7 @@
         this.gameContainer.position.set(originX, originY);
         this.gameContainer.visible = false;
         this.gameContainer._width = width * this.BlockUnit;
-        this.gameContainer._height = height* this.BlockUnit;
+        this.gameContainer._height = height * this.BlockUnit;
 
 
         let type1 = this.team === 1 ? "T1" : "T2";
@@ -289,9 +299,21 @@
 
         this.app.ticker.add(delta => this.Play(delta));
 
-        this.sync_cond();
-        setInterval(this.sync_cond,1000);
+        let tanks = this.TankSprite.children;
+        let tank = {};
+        for (let i = 0; i < tanks.length; i++) {
+          if (tanks[i].name === this.id) {
+            tank = tanks[i];
+          }
+        }
 
+        this.sync_cond();
+        this.initkeyboardDetect();
+        setInterval(() => {
+          if (tank.ammunition < 4)
+            tank.ammunition += 1;
+        }, 1000);
+        // setInterval(this.sync_cond,1000);
       },
       Play: function (delta) {
         this.HitDetectCore();
@@ -412,11 +434,20 @@
           down = this.keyboard(40);
 
         let speed = 5;
+        let tanks = this.TankSprite.children;
+        let tank = {};
+        for (let i = 0; i < tanks.length; i++) {
+          if (tanks[i].name === this.id) {
+            tank = tanks[i];
+          }
+        }
 
         attack.press = () => {
-          this.socket.emit('tank_fire', {
-            'id': this.id
-          })
+          if (tank.ammunition > 0) {
+            this.socket.emit('tank_fire', {
+              'id': this.id
+            })
+          }
         };
         attack.release = () => {
         };
@@ -424,6 +455,8 @@
         left.press = () => {
           this.socket.emit('tank_move', {
             'id': this.id,
+            'x': tank.x / this.gameContainer._width,
+            'y': tank.y / this.gameContainer._height,
             'vx': -speed,
             'vy': 0,
             'rotation': 3 * Pi / 2
@@ -433,6 +466,8 @@
           if (!right.isDown && !down.isDown && !up.isDown) {
             this.socket.emit('tank_move', {
               'id': this.id,
+              'x': tank.x / this.gameContainer._width,
+              'y': tank.y / this.gameContainer._height,
               'vx': 0,
               'vy': 0,
               'rotation': 3 * Pi / 2
@@ -443,6 +478,8 @@
         up.press = () => {
           this.socket.emit('tank_move', {
             'id': this.id,
+            'x': tank.x / this.gameContainer._width,
+            'y': tank.y / this.gameContainer._height,
             'vx': 0,
             'vy': -speed,
             'rotation': 0
@@ -452,6 +489,8 @@
           if (!down.isDown && !left.isDown && !right.isDown) {
             this.socket.emit('tank_move', {
               'id': this.id,
+              'x': tank.x / this.gameContainer._width,
+              'y': tank.y / this.gameContainer._height,
               'vx': 0,
               'vy': 0,
               'rotation': 0
@@ -462,6 +501,8 @@
         right.press = () => {
           this.socket.emit('tank_move', {
             'id': this.id,
+            'x': tank.x / this.gameContainer._width,
+            'y': tank.y / this.gameContainer._height,
             'vx': speed,
             'vy': 0,
             'rotation': Pi / 2
@@ -471,6 +512,8 @@
           if (!left.isDown && !down.isDown && !up.isDown) {
             this.socket.emit('tank_move', {
               'id': this.id,
+              'x': tank.x / this.gameContainer._width,
+              'y': tank.y / this.gameContainer._height,
               'vx': 0,
               'vy': 0,
               'rotation': Pi / 2
@@ -481,6 +524,8 @@
         down.press = () => {
           this.socket.emit('tank_move', {
             'id': this.id,
+            'x': tank.x / this.gameContainer._width,
+            'y': tank.y / this.gameContainer._height,
             'vx': 0,
             'vy': speed,
             'rotation': Pi
@@ -490,6 +535,8 @@
           if (!up.isDown && !left.isDown && !right.isDown) {
             this.socket.emit('tank_move', {
               'id': this.id,
+              'x': tank.x / this.gameContainer._width,
+              'y': tank.y / this.gameContainer._height,
               'vx': 0,
               'vy': 0,
               'rotation': Pi
@@ -537,6 +584,8 @@
             //   console.log(msg.vx, msg.vy);
             // }
             msg = tanks[i].team === this.team ? msg : this.reverseAttr(msg);
+            tanks[i].x = this.gameContainer._width * msg.x;
+            tanks[i].y = this.gameContainer._height * msg.y;
             tanks[i].vx = msg.vx;
             tanks[i].vy = msg.vy;
             tanks[i].rotation = msg.rotation;
@@ -545,6 +594,8 @@
         }
       },
       reverseAttr: function (msg) {
+        msg.x = 1 - msg.x;
+        msg.y = 1 - msg.y;
         msg.vx = -msg.vx;
         msg.vy = -msg.vy;
         msg.rotation = (Pi + msg.rotation) % (2 * Pi);
@@ -562,9 +613,10 @@
       on_sync_cond: function (msg) {
         let tanks = this.TankSprite.children;
         for (let i = 0; i < tanks.length; i++) {
-          if(tanks[i].team !== this.team)
-          this.updateTank(tanks[i], msg[tanks[i].name]);
+          if (tanks[i].team !== this.team)
+            this.updateTank(tanks[i], msg[tanks[i].name]);
         }
+        this.isLoading = false;
       },
       Init: function (json) {
         this.isLoading = true;
@@ -594,7 +646,6 @@
         }
         else
           this.InitMap(json);
-        this.initkeyboardDetect();
       },
       openSimpleDialog: function () {
         this.openSimple = true;
@@ -609,18 +660,18 @@
         this.openSimple = false;
         if (this.isHost) {
           this.socket.emit('gameStart', {
-            'mapId': 'map1'
+            'mapId': this.map
           });
         }
       },
-      LoadingProgress: function(msg){
-        this.loadingValue += 100/msg.num;
-        if(this.loadingValue >= 95){
-          this.isLoading = false;
-        }
+      LoadingProgress: function (msg) {
+        this.loadingValue += 100 / msg.num;
+        // if(this.loadingValue >= 95){
+        //   this.isLoading = false;
+        // }
         this.gameContainer.visible = true;
       },
-      sync_cond: function(){
+      sync_cond: function () {
         let tanks = this.TankSprite.children;
         let tank = {};
         for (let i = 0; i < tanks.length; i++) {
@@ -630,25 +681,25 @@
             tank.name = tanks[i].name;
             tank.team = tanks[i].team;
             tank.bulletType = tanks[i].bulletType;
-            tank.y = tanks[i].y/this.gameContainer._height;
-            tank.x = tanks[i].x/this.gameContainer._width;
-            console.log(tank.y,tank.x);
+            tank.y = tanks[i].y / this.gameContainer._height;
+            tank.x = tanks[i].x / this.gameContainer._width;
+            console.log(tank.y, tank.x);
             break;
           }
         }
-        if(this.isLoading)
+        if (this.isLoading)
           this.socket.emit('ready', tank);
         else
           this.socket.emit('sync_cond', tank);
       }
     },
     mounted() {
-      this.socket = io.connect('10.0.1.115:3000/');
+      this.socket = io.connect('localhost:3000/');
       this.socket.on('tank_move', (msg) => this.on_tank_move(msg));
       this.socket.on('tank_fire', (msg) => this.on_tank_fire(msg));
       this.socket.on('sync_cond', (msg) => this.on_sync_cond(msg));
       this.socket.on('gameStart', (msg) => this.Init(msg));
-      this.socket.on('ready' , (msg) => this.LoadingProgress(msg));
+      this.socket.on('ready', (msg) => this.LoadingProgress(msg));
 
       this.openSimpleDialog();
     }
