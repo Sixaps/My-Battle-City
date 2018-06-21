@@ -57,6 +57,7 @@
         TankSprite: new pixi.Container(),
         ForestSprite: new pixi.particles.ParticleContainer(),
         WaterSprite: new pixi.particles.ParticleContainer(),
+        BarSprite: new pixi.Container(),
         socket: {},
         TypeDict: {"T1": "tank1.png", "T2": "tank2.png"}
       }
@@ -64,6 +65,8 @@
     methods: {
       CreateTank: function (x, y, rotation, name, type, team) {
         let tank = new this.Sprite(this.texture[this.TypeDict[type]]);
+        let healthBar = new this.Sprite(this.texture['lifeG5.png']);
+        let bulletBar = new this.Sprite(this.texture['bullet4.png']);
         tank.live = 5;
         tank.ammunition = 4;
         tank.name = name;
@@ -80,7 +83,7 @@
         tank.x = x;
         tank.visible = true;
         tank.speed = 5;
-        tank.width = tank.height = this.BlockUnit * 3 / 4;
+        tank.width = tank.height = this.BlockUnit * 3 / 5;
         tank.anchor.set(0.5, 0.5);
         tank.Hit = () => {
           this.TankHit(tank)
@@ -89,6 +92,23 @@
           this.TankHited(level, tank)
         };
         this.TankSprite.addChild(tank);
+
+        let rate =  tank.width/healthBar.width;
+        healthBar.name = name;
+        healthBar.scale.set(rate,rate);
+        healthBar.anchor.set(0.5,0.5);
+        healthBar.x = tank.x;
+        healthBar.y = tank.y - tank.height;
+        bulletBar.name = name;
+        bulletBar.scale.set(rate,rate);
+        bulletBar.anchor.set(0.5,0.5);
+        bulletBar.x = tank.x;
+        bulletBar.y = tank.y - tank.height*2/3;
+        this.BarSprite.addChild(healthBar);
+        this.BarSprite.addChild(bulletBar);
+
+        tank.healthBar = healthBar;
+        tank.bulletBar = bulletBar;
       },
       updateTank: function (tank, msg) {
         tank.live = msg.live;
@@ -110,7 +130,7 @@
       },
       fire: function (tank) {
         // console.log(tank.team);
-        if (tank.bulletType <= 3) {
+        if (tank.bulletType <= 3 && tank.ammunition > 0) {
           let bullet = new this.Sprite(this.texture["炮弹上2.png"]);
           bullet.width = bullet.height = tank.width / 3;
           bullet.rotation = tank.rotation;
@@ -118,6 +138,7 @@
           bullet.level = tank.bulletType;
           bullet.team = tank.team;
           tank.ammunition -= 1;
+          this.updateTankBar(tank);
           bullet.Hit = () => {
             this.BulletHit(bullet)
           };
@@ -167,10 +188,11 @@
         //对stage按照wight和height进行划分，根据map的情况新建sprite并放到指定位置，需要texture,再来一个函数才行
         this.BlockUnit = (this.app.screen.height / height > this.app.screen.width / width) ?
           this.app.screen.width / width : this.app.screen.height / height;
+        this.BlockUnit *= 1.5;
         let originX = (this.app.screen.width - width * this.BlockUnit) / 2;
         let originY = (this.app.screen.height - height * this.BlockUnit) / 2;
 
-        this.gameContainer.addChild(this.BackgroundSprite, this.WallSprite, this.WaterSprite, this.TankSprite, this.BulletSprite, this.ForestSprite);
+        this.gameContainer.addChild(this.BackgroundSprite, this.WallSprite, this.WaterSprite, this.TankSprite, this.BulletSprite, this.BarSprite, this.ForestSprite);
         this.gameContainer.position.set(originX, originY);
         this.gameContainer.visible = false;
         this.gameContainer._width = width * this.BlockUnit;
@@ -306,14 +328,20 @@
             tank = tanks[i];
           }
         }
+        this.gameContainer.x -= tank.x - this.gameContainer._width/2;
+        this.gameContainer.y -= tank.y - this.gameContainer._height/2;
 
         this.sync_cond();
         this.initkeyboardDetect();
+        document.body.appendChild(this.app.view);
         setInterval(() => {
-          if (tank.ammunition < 4)
-            tank.ammunition += 1;
-        }, 1000);
-        // setInterval(this.sync_cond,1000);
+          for (let i = 0; i < tanks.length; i++) {
+            if (tanks[i].ammunition < 4) {
+              tanks[i].ammunition += 1;
+              this.updateTankBar(tanks[i]);
+            }
+          }
+        }, 1500);
       },
       Play: function (delta) {
         this.HitDetectCore();
@@ -334,6 +362,13 @@
           //   console.log(tanks[i].vx,tanks[i].vy);
           tanks[i].x += tanks[i].vx * this.BlockUnit / 50;
           tanks[i].y += tanks[i].vy * this.BlockUnit / 50;
+          this.gameContainer.x -= tanks[i].vx * this.BlockUnit / 50;
+          this.gameContainer.y -= tanks[i].vy * this.BlockUnit / 50;
+          tanks[i].bulletBar.x  = tanks[i].x;
+          tanks[i].healthBar.x  = tanks[i].x;
+          tanks[i].bulletBar.y  = tanks[i].y - tanks[i].height*3/5;
+          tanks[i].healthBar.y  = tanks[i].y - tanks[i].height*4/5;
+
         }
 
         for (let i = 0; i < bullets.length; i++) {
@@ -402,6 +437,12 @@
         if (tank.live <= 0) {
           this.TankDead(tank);
         }
+        this.updateTankBar(tank);
+      },
+      updateTankBar: function(tank){
+        tank.bulletBar.texture = this.texture['bullet' + tank.ammunition + '.png'];
+        if(tank.live >= 1)
+          tank.healthBar.texture = this.texture['lifeG' + tank.live + '.png'];
       },
       TankDead: function (tank) {
         tank.x = -1000;
@@ -413,6 +454,7 @@
           tank.y = tank.initY;
           tank.rotation = tank.initR;
           tank.live = 5;
+          this.updateTankBar(tank);
         }, 5000);
       },
       TankHit: function (tank) {
@@ -433,7 +475,7 @@
           attack = this.keyboard(65),
           down = this.keyboard(40);
 
-        let speed = 5;
+        let speed = 2;
         let tanks = this.TankSprite.children;
         let tank = {};
         for (let i = 0; i < tanks.length; i++) {
@@ -633,13 +675,13 @@
         this.app.renderer.backgroundColor = 0x2b85f4;
         this.app.renderer.resize(window.innerWidth, window.innerHeight);
 
-        document.body.appendChild(this.app.view);
+
         // this.$el.append(this.app.view);
 
         this.loader.crossorigin = true;
         if (this.resources.Sprites === undefined) {
           this.loader
-            .add("Sprites", "/static/new_test_sprite2.json")
+            .add("Sprites", "/static/new_test_sprite5.json")
             .load(() => {
               this.InitMap(json)
             });
@@ -694,7 +736,7 @@
       }
     },
     mounted() {
-      this.socket = io.connect('localhost:3000/');
+      this.socket = io.connect('10.0.1.115:3000/');
       this.socket.on('tank_move', (msg) => this.on_tank_move(msg));
       this.socket.on('tank_fire', (msg) => this.on_tank_fire(msg));
       this.socket.on('sync_cond', (msg) => this.on_sync_cond(msg));
