@@ -3,21 +3,32 @@
     <mu-dialog title="登陆" :esc-press-close="false" :overlay-close="false" :open.sync="openSimple">
       <mu-text-field v-model="id" label="请输入用户名" label-float></mu-text-field>
       <br/>
-      <mu-text-field v-model="team" label="请输入队伍" label-float></mu-text-field>
+      <mu-select label="请选择队伍" v-model="team" full-width>
+        <mu-option v-for="option,index in teamOptions" :key="option" :label="option" :value="option"></mu-option>
+      </mu-select>
       <br/>
       <mu-text-field v-model="roomid" label="请输入房间号" label-float></mu-text-field>
       <br/>
       <mu-flex class="select-control-row">
         <mu-switch v-model="isHost" label="是否房主"></mu-switch>
       </mu-flex>
+      <br/>
       <mu-select label="请选择地图" v-model="map" full-width v-if="isHost">
         <mu-option v-for="option,index in mapOptions" :key="option" :label="option" :value="option"></mu-option>
       </mu-select>
+      <br/>
       <mu-button slot="actions" flat color="primary" @click="closeSimpleDialog">开始游戏</mu-button>
     </mu-dialog>
     <mu-flex style="margin: 16px 0;" v-if="isLoading">
       <mu-linear-progress mode="determinate" :value="loadingValue" :size="15" color="blue"></mu-linear-progress>
     </mu-flex>
+    <div v-if="isDead" style="font-size:60pt;width:100%;text-align:center;z-index:1000;color:#000000;background-color:rgba(100,100,100,0.5);height:100%;font-family: Monospaced sans-serif;position:absolute;">
+      <h1 id="countdown">{{countdown}}</h1>
+    </div>
+    <mu-dialog :title="gameOverTitle" width="600" max-width="80%" :esc-press-close="false" :overlay-close="false" :open.sync="isGameover">
+      <mu-button slot="actions" flat color="primary" @click="exit">退出</mu-button>
+      <mu-button slot="actions" flat color="primary" @click="playAgain">再来一局</mu-button>
+    </mu-dialog>
   </div>
 </template>
 
@@ -32,6 +43,10 @@
     name: "gameCore",
     data() {
       return {
+        gameOverTitle : "胜负乃兵家常事，请少侠重新再来",
+        isGameover: false,
+        isDead: false,
+        countdown: 5,
         mapOptions: [
           'map1', 'map2'
         ],
@@ -42,6 +57,7 @@
         openSimple: false,
         id: '',
         team: '',
+        teamOptions: ["1","2"],
         roomid: '',
         app: {},
         gameContainer: new pixi.Container(),
@@ -93,17 +109,17 @@
         };
         this.TankSprite.addChild(tank);
 
-        let rate =  tank.width/healthBar.width;
+        let rate = tank.width / healthBar.width;
         healthBar.name = name;
-        healthBar.scale.set(rate,rate);
-        healthBar.anchor.set(0.5,0.5);
+        healthBar.scale.set(rate, rate);
+        healthBar.anchor.set(0.5, 0.5);
         healthBar.x = tank.x;
         healthBar.y = tank.y - tank.height;
         bulletBar.name = name;
-        bulletBar.scale.set(rate,rate);
-        bulletBar.anchor.set(0.5,0.5);
+        bulletBar.scale.set(rate, rate);
+        bulletBar.anchor.set(0.5, 0.5);
         bulletBar.x = tank.x;
-        bulletBar.y = tank.y - tank.height*2/3;
+        bulletBar.y = tank.y - tank.height * 2 / 3;
         this.BarSprite.addChild(healthBar);
         this.BarSprite.addChild(bulletBar);
 
@@ -201,6 +217,12 @@
 
         let type1 = this.team === 1 ? "T1" : "T2";
         let type2 = this.team === 2 ? "T1" : "T2";
+        let baseType1 = this.team === 1 ? 'base3.png' : 'base4.png';
+        let baseType2 = this.team === 2 ? 'base3.png' : 'base4.png';
+        let baseLife1 = this.team === 1 ? 'lifeB5.png' : 'lifeR5.png';
+        let baseLife2 = this.team === 2 ? 'lifeB5.png' : 'lifeR5.png';
+
+
 
         let floor_textures = [this.texture["floor1.png"], this.texture["floor2.png"], this.texture["floor4.png"], this.texture["floor3.png"]];
         for (let i = 0, x = this.BlockUnit / 2; i < width; i++, x += this.BlockUnit) {
@@ -270,7 +292,7 @@
               this.ForestSprite.addChild(ice);
             }
             else if (map[j][i] === "B") {
-              let ice = new this.Sprite(this.texture["base3.png"]);
+              let ice = new this.Sprite(this.texture[baseType1]);
               ice.width = ice.height = this.BlockUnit;
               ice.anchor.set(0.5, 0.5);
               ice.x = x;
@@ -278,13 +300,25 @@
               ice.level = 2;
               ice.live = 5;
               ice.team = this.team;
+
+              let healthBar = new this.Sprite(this.texture[baseLife1]);
+              let rate = ice.width / healthBar.width;
+              healthBar.name = name;
+              healthBar.scale.set(rate, rate);
+              healthBar.anchor.set(0.5, 0.5);
+              healthBar.x = ice.x;
+              healthBar.y = ice.y - ice.height*3/5;
+              this.BarSprite.addChild(healthBar);
+
+              ice.healthBar = healthBar;
+
               ice.Hited = (level) => {
                 this.BaseHited(level, ice);
               };
               this.WallSprite.addChild(ice);
             }
             else if (map[j][i] === "E") {
-              let ice = new this.Sprite(this.texture["base4.png"]);
+              let ice = new this.Sprite(this.texture[baseType2]);
               ice.width = ice.height = this.BlockUnit;
               ice.anchor.set(0.5, 0.5);
               ice.x = x;
@@ -295,6 +329,17 @@
               ice.Hited = (level) => {
                 this.BaseHited(level, ice);
               };
+
+              let healthBar = new this.Sprite(this.texture[baseLife2]);
+              let rate = ice.width / healthBar.width;
+              healthBar.name = name;
+              healthBar.scale.set(rate, rate);
+              healthBar.anchor.set(0.5, 0.5);
+              healthBar.x = ice.x;
+              healthBar.y = ice.y - ice.height*3/5;
+              this.BarSprite.addChild(healthBar);
+
+              ice.healthBar = healthBar;
               this.WallSprite.addChild(ice);
             }
             else if (map[j][i] === "T1") {
@@ -328,8 +373,10 @@
             tank = tanks[i];
           }
         }
-        this.gameContainer.x -= tank.x - this.gameContainer._width/2;
-        this.gameContainer.y -= tank.y - this.gameContainer._height/2;
+        this.gameContainer.x -= tank.x - this.gameContainer._width / 2;
+        this.gameContainer.y -= tank.y - this.gameContainer._height / 2;
+        this.gameContainer.initX = this.gameContainer.x;
+        this.gameContainer.initY = this.gameContainer.y;
 
         this.sync_cond();
         this.initkeyboardDetect();
@@ -362,12 +409,14 @@
           //   console.log(tanks[i].vx,tanks[i].vy);
           tanks[i].x += tanks[i].vx * this.BlockUnit / 50;
           tanks[i].y += tanks[i].vy * this.BlockUnit / 50;
-          this.gameContainer.x -= tanks[i].vx * this.BlockUnit / 50;
-          this.gameContainer.y -= tanks[i].vy * this.BlockUnit / 50;
-          tanks[i].bulletBar.x  = tanks[i].x;
-          tanks[i].healthBar.x  = tanks[i].x;
-          tanks[i].bulletBar.y  = tanks[i].y - tanks[i].height*3/5;
-          tanks[i].healthBar.y  = tanks[i].y - tanks[i].height*4/5;
+          if (tanks[i].name === this.id) {
+            this.gameContainer.x -= tanks[i].vx * this.BlockUnit / 50;
+            this.gameContainer.y -= tanks[i].vy * this.BlockUnit / 50;
+          }
+          tanks[i].bulletBar.x = tanks[i].x;
+          tanks[i].healthBar.x = tanks[i].x;
+          tanks[i].bulletBar.y = tanks[i].y - tanks[i].height * 3 / 5;
+          tanks[i].healthBar.y = tanks[i].y - tanks[i].height * 4 / 5;
 
         }
 
@@ -421,15 +470,25 @@
         base.live -= level;
         if (base.live <= 0) {
           this.GameOver(base.team);
+          return;
+        }
+        if(base.team === 1){
+          base.healthBar.texture = this.texture['lifeB'+ base.live + '.png'];
+        }
+        else{
+          base.healthBar.texture = this.texture['lifeR'+ base.live + '.png'];
         }
       },
       GameOver: function (team) {
         this.socket.emit('gameOver');
         if (this.team === team) {
-          alert("you lose!!");
+          this.isGameover = true;
+          this.gameOverTitle = "胜负乃兵家常事，请少侠重新再来"
         }
         else {
-          alert("you win!!");
+          this.isGameover = true;
+          this.gameOverTitle = "恭喜你，获得胜利！"
+
         }
       },
       TankHited: function (level, tank) {
@@ -439,23 +498,53 @@
         }
         this.updateTankBar(tank);
       },
-      updateTankBar: function(tank){
+      updateTankBar: function (tank) {
         tank.bulletBar.texture = this.texture['bullet' + tank.ammunition + '.png'];
-        if(tank.live >= 1)
+        if (tank.live >= 1)
           tank.healthBar.texture = this.texture['lifeG' + tank.live + '.png'];
       },
       TankDead: function (tank) {
         tank.x = -1000;
         tank.y = -1000;
         tank.visible = false;
-        setTimeout(() => {
-          tank.visible = true;
-          tank.x = tank.initX;
-          tank.y = tank.initY;
-          tank.rotation = tank.initR;
-          tank.live = 5;
-          this.updateTankBar(tank);
-        }, 5000);
+        if(tank.name === this.id) {
+          this.isDead = true;
+          this.StartCountdown(tank);
+        }
+      },
+      StartCountdown: function (tank) {
+        if (this.countdown === 0) {
+          this.socket.emit('tankResurgence',{
+            'name' : tank.name
+          });
+          return;
+        }
+        setTimeout(()=>{
+          this.countdown--;
+
+          this.StartCountdown(tank);
+        }, 1000);
+      },
+      TankResurgence: function(msg){
+        let tanks = this.TankSprite.children;
+        let tank = {};
+        for(let i = 0; i < tanks.length; i++){
+          if(tanks[i].name === msg.name ){
+            tank = tanks[i]
+          }
+        }
+        if(tank.name === this.id) {
+          this.isDead = false;
+          this.gameContainer.x = this.gameContainer.initX;
+          this.gameContainer.y = this.gameContainer.initY;
+        }
+        this.countdown = 5;
+        tank.visible = true;
+        tank.x = tank.initX;
+        tank.y = tank.initY;
+        tank.rotation = tank.initR;
+        tank.live = 5;
+        this.updateTankBar(tank);
       },
       TankHit: function (tank) {
         tank.vx = tank.vy = 0;
@@ -662,6 +751,7 @@
       },
       Init: function (json) {
         this.isLoading = true;
+        this.loadingValue = 0;
         this.app = new this.Application({
           width: 256,
           height: 256,
@@ -675,6 +765,14 @@
         this.app.renderer.backgroundColor = 0x2b85f4;
         this.app.renderer.resize(window.innerWidth, window.innerHeight);
 
+        this.WallSprite = new pixi.particles.ParticleContainer();
+        this.BulletSprite = new pixi.particles.ParticleContainer();
+        this.BackgroundSprite = new pixi.particles.ParticleContainer();
+        this.TankSprite = new pixi.Container();
+        this.ForestSprite = new pixi.particles.ParticleContainer();
+        this.WaterSprite = new pixi.particles.ParticleContainer();
+        this.BarSprite = new pixi.Container();
+        this.gameContainer = new pixi.Container();
 
         // this.$el.append(this.app.view);
 
@@ -733,6 +831,36 @@
           this.socket.emit('ready', tank);
         else
           this.socket.emit('sync_cond', tank);
+      },
+      playAgain: function(){
+        this.isGameover = false;
+        this.app.destroy(true,{
+          'children' : true,
+          'texture' : false,
+          'baseTexture' : false
+        });
+
+
+        this.team = parseInt(this.team);
+        this.socket.emit('join', {
+          'id': this.id,
+          'roomid': this.roomid,
+          'team': this.team
+        });
+        if (this.isHost) {
+          this.socket.emit('gameStart', {
+            'mapId': this.map
+          });
+        }
+      },
+      exit: function(){
+        this.isGameover = false;
+        this.app.destroy(true,{
+          'children' : true,
+          'texture' : false,
+          'baseTexture' : false
+        });
+        this.openSimple = true;
       }
     },
     mounted() {
@@ -742,6 +870,7 @@
       this.socket.on('sync_cond', (msg) => this.on_sync_cond(msg));
       this.socket.on('gameStart', (msg) => this.Init(msg));
       this.socket.on('ready', (msg) => this.LoadingProgress(msg));
+      this.socket.on('tankResurgence', (msg) => this.TankResurgence(msg));
 
       this.openSimpleDialog();
     }

@@ -26,6 +26,7 @@ io.on('connection', function (socket) {
     io.to(socket.room).emit('ready',{
       'num' : Object.keys(users[socket.room]).length
     });
+    console.log(status);
     for(let key in status[socket.room]){
       if(status[socket.room][key] === false)
         return;
@@ -86,10 +87,14 @@ io.on('connection', function (socket) {
   });
 
   socket.on('gameOver',function(msg){
-    clearInterval(intervals[socket.room]);
+    // clearInterval(intervals[socket.room]);
     delete tanks[socket.room];
     delete status[socket.room];
     delete users[socket.room];
+  });
+
+  socket.on('tankResurgence',function(msg){
+    io.to(socket.room).emit('tankResurgence',msg);
   })
 });
 
@@ -119,5 +124,6 @@ function gameStart(roomid) {
     json.users = gameUsers;
     io.to(roomid).emit('gameStart', json);
     console.log(roomid + '房间开始游戏');
+    // console.log(tanks,status,users);
   }
 }
