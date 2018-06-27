@@ -10,10 +10,13 @@
     "build": "node build/build.js"
   },
   "dependencies": {
+    "create.js": "0.0.16",
+    "createjs-soundjs": "^0.6.2",
     "express": "^4.16.3",
     "muse-ui": "^3.0.0-rc.1",
     "pixi.js": "^4.8.1",
     "socket.io": "^2.1.1",
+    "soundjs": "^1.0.1",
     "vue": "^2.5.2",
     "vue-router": "^3.0.1"
   },

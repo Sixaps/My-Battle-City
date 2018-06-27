@@ -7,7 +7,7 @@ var fs=require('fs');
 var users = {};
 let tanks = {};
 let status = {};
-let intervals = {}
+let rooms = {};
 app.use(express.static(__dirname + '/dist'));
 
 app.get('/', function (req, res) {
@@ -15,6 +15,48 @@ app.get('/', function (req, res) {
 });
 
 io.on('connection', function (socket) {
+
+  socket.on('getRooms', function(){
+    let allRooms = [];
+    for (let key in users) {
+      allRooms.push(key);
+    }
+    io.to(socket.id).emit('getRooms',{
+      'rooms': allRooms
+    });
+  });
+
+  socket.on('createRoom', function(msg){
+    msg.isHost = true;
+    socket.name = msg.id;
+    socket.room = msg.roomid;
+    if(users[msg.roomid]){
+      io.to(socket.id).emit('isroomExisted',{
+        'isExisted': true
+      });
+      return;
+    }
+    else{
+      users[msg.roomid] = {};
+      tanks[socket.room] = {};
+      status[socket.room] = {};
+    }
+    users[msg.roomid][msg.id] = msg;
+    status[socket.room][msg.id] = false;
+    tanks[socket.room][msg.id] = {};
+    socket.join(msg.roomid);
+    console.log(msg.id,'玩家创建了房间',msg.roomid);
+    io.to(socket.id).emit('isroomExisted',{
+      'isExisted': false
+    });
+    let allRooms = [];
+    for (let key in users) {
+      allRooms.push(key);
+    }
+    io.emit('getRooms',{
+      'rooms': allRooms
+    });
+  });
 
   socket.on('gameStart', function (msg) {
     loadMap(msg.mapId, socket.room);
@@ -36,21 +78,27 @@ io.on('connection', function (socket) {
   });
 
   socket.on('join', function (msg) {
+    msg.isHost = false;
     socket.name = msg.id;
     socket.room = msg.roomid;
     if (!users[msg.roomid]) {
-      users[msg.roomid] = {};
-      tanks[socket.room] = {};
-      status[socket.room] = {};
+      io.to(socket.id).emit('isroomExisted',{
+        'isExisted': false
+      });
+      return;
     }
-    console.log(status[socket.room]);
     users[msg.roomid][msg.id] = msg;
     status[socket.room][msg.id] = false;
     tanks[socket.room][msg.id] = {};
+    console.log(status[socket.room]);
     socket.join(msg.roomid);
     console.log(socket.name + '加入了' + msg.roomid + "房间");
     console.log("房间当前成员:" + Object.keys(users[socket.room]));
     console.log("共"+ Object.keys(users[socket.room]).length + "人");
+
+    io.to(socket.id).emit('isroomExisted',{
+      'isExisted': true
+    });
   });
 
   socket.on('sync_cond',function(msg){
@@ -73,16 +121,23 @@ io.on('connection', function (socket) {
     io.to(socket.room).emit('tank_fire', msg);
   });
   socket.on('disconnect', function () {
-    if (users[socket.room] && users[socket.room].hasOwnProperty(socket.name)) {
-      delete users[socket.room][socket.name];
-      console.log(socket.name + '退出了' + socket.room + "房间");
-      console.log("房间当前成员:" + Object.keys(users[socket.room]));
-      console.log("共"+ Object.keys(users[socket.room]).length + "人");
-      socket.leave(socket.room)
-    }
-    if (tanks[socket.room] && tanks[socket.room].hasOwnProperty(socket.name)) {
-      delete tanks[socket.room][socket.name];
-      delete status[socket.room][socket.name];
+    if (users[socket.room] && users[socket.room].hasOwnProperty(socket.name)){
+      if(users[socket.room][socket.name].isHost){
+        delete users[socket.room];
+        delete tanks[socket.room];
+        delete status[socket.room];
+        io.to(socket.room).emit('roomClose');
+        console.log(socket.room+'房间被销毁');
+      }
+      else {
+        delete users[socket.room][socket.name];
+        delete tanks[socket.room][socket.name];
+        delete status[socket.room][socket.name];
+        console.log(socket.name + '退出了' + socket.room + "房间");
+        console.log("房间当前成员:" + Object.keys(users[socket.room]));
+        console.log("共"+ Object.keys(users[socket.room]).length + "人");
+      }
+      socket.leave(socket.room);
     }
   });
 

@@ -7,7 +7,10 @@
         <mu-option v-for="option,index in teamOptions" :key="option" :label="option" :value="option"></mu-option>
       </mu-select>
       <br/>
-      <mu-text-field v-model="roomid" label="请输入房间号" label-float></mu-text-field>
+      <mu-text-field v-model="roomid" label="请输入房间号" label-float v-if="isHost"></mu-text-field>
+      <mu-select label="请选择房间" v-model="roomid" full-width v-if="!isHost">
+        <mu-option v-for="option,index in roomOptions" :key="option" :label="option" :value="option"></mu-option>
+      </mu-select>
       <br/>
       <mu-flex class="select-control-row">
         <mu-switch v-model="isHost" label="是否房主"></mu-switch>
@@ -17,18 +20,22 @@
         <mu-option v-for="option,index in mapOptions" :key="option" :label="option" :value="option"></mu-option>
       </mu-select>
       <br/>
-      <mu-button slot="actions" flat color="primary" @click="closeSimpleDialog">开始游戏</mu-button>
+      <mu-button slot="actions" flat color="primary" @click="joinRoom" v-if="!isHost">加入房间</mu-button>
+      <mu-button slot="actions" flat color="primary" @click="createRoom" v-if="isHost">创建房间</mu-button>
     </mu-dialog>
     <mu-flex style="margin: 16px 0;" v-if="isLoading">
       <mu-linear-progress mode="determinate" :value="loadingValue" :size="15" color="blue"></mu-linear-progress>
     </mu-flex>
-    <div v-if="isDead" style="font-size:60pt;width:100%;text-align:center;z-index:1000;color:#000000;background-color:rgba(100,100,100,0.5);height:100%;font-family: Monospaced sans-serif;position:absolute;">
+    <div v-if="isDead"
+         style="font-size:60pt;width:100%;text-align:center;z-index:1000;color:#000000;background-color:rgba(100,100,100,0.5);height:100%;font-family: Monospaced sans-serif;position:absolute;">
       <h1 id="countdown">{{countdown}}</h1>
     </div>
-    <mu-dialog :title="gameOverTitle" width="600" max-width="80%" :esc-press-close="false" :overlay-close="false" :open.sync="isGameover">
+    <mu-dialog :title="gameOverTitle" width="600" max-width="80%" :esc-press-close="false" :overlay-close="false"
+               :open.sync="isGameover">
       <mu-button slot="actions" flat color="primary" @click="exit">退出</mu-button>
       <mu-button slot="actions" flat color="primary" @click="playAgain">再来一局</mu-button>
     </mu-dialog>
+    <mu-button slot="actions" flat color="primary" @click="gameStart" v-if="!openSimple&&isHost">开始游戏</mu-button>
   </div>
 </template>
 
@@ -43,7 +50,8 @@
     name: "gameCore",
     data() {
       return {
-        gameOverTitle : "胜负乃兵家常事，请少侠重新再来",
+        roomOptions: [],
+        gameOverTitle: "胜负乃兵家常事，请少侠重新再来",
         isGameover: false,
         isDead: false,
         countdown: 5,
@@ -57,7 +65,7 @@
         openSimple: false,
         id: '',
         team: '',
-        teamOptions: ["1","2"],
+        teamOptions: ["1", "2"],
         roomid: '',
         app: {},
         gameContainer: new pixi.Container(),
@@ -73,6 +81,7 @@
         TankSprite: new pixi.Container(),
         ForestSprite: new pixi.particles.ParticleContainer(),
         WaterSprite: new pixi.particles.ParticleContainer(),
+        AnimatedContainer: new pixi.Container(),
         BarSprite: new pixi.Container(),
         socket: {},
         TypeDict: {"T1": "tank1.png", "T2": "tank2.png"}
@@ -208,7 +217,7 @@
         let originX = (this.app.screen.width - width * this.BlockUnit) / 2;
         let originY = (this.app.screen.height - height * this.BlockUnit) / 2;
 
-        this.gameContainer.addChild(this.BackgroundSprite, this.WallSprite, this.WaterSprite, this.TankSprite, this.BulletSprite, this.BarSprite, this.ForestSprite);
+        this.gameContainer.addChild(this.BackgroundSprite, this.WallSprite, this.WaterSprite, this.TankSprite, this.BulletSprite, this.BarSprite, this.ForestSprite,this.AnimatedContainer);
         this.gameContainer.position.set(originX, originY);
         this.gameContainer.visible = false;
         this.gameContainer._width = width * this.BlockUnit;
@@ -221,7 +230,6 @@
         let baseType2 = this.team === 2 ? 'base3.png' : 'base4.png';
         let baseLife1 = this.team === 1 ? 'lifeB5.png' : 'lifeR5.png';
         let baseLife2 = this.team === 2 ? 'lifeB5.png' : 'lifeR5.png';
-
 
 
         let floor_textures = [this.texture["floor1.png"], this.texture["floor2.png"], this.texture["floor4.png"], this.texture["floor3.png"]];
@@ -307,7 +315,7 @@
               healthBar.scale.set(rate, rate);
               healthBar.anchor.set(0.5, 0.5);
               healthBar.x = ice.x;
-              healthBar.y = ice.y - ice.height*3/5;
+              healthBar.y = ice.y - ice.height * 3 / 5;
               this.BarSprite.addChild(healthBar);
 
               ice.healthBar = healthBar;
@@ -336,7 +344,7 @@
               healthBar.scale.set(rate, rate);
               healthBar.anchor.set(0.5, 0.5);
               healthBar.x = ice.x;
-              healthBar.y = ice.y - ice.height*3/5;
+              healthBar.y = ice.y - ice.height * 3 / 5;
               this.BarSprite.addChild(healthBar);
 
               ice.healthBar = healthBar;
@@ -472,11 +480,11 @@
           this.GameOver(base.team);
           return;
         }
-        if(base.team === 1){
-          base.healthBar.texture = this.texture['lifeB'+ base.live + '.png'];
+        if (base.team === 1) {
+          base.healthBar.texture = this.texture['lifeB' + base.live + '.png'];
         }
-        else{
-          base.healthBar.texture = this.texture['lifeR'+ base.live + '.png'];
+        else {
+          base.healthBar.texture = this.texture['lifeR' + base.live + '.png'];
         }
       },
       GameOver: function (team) {
@@ -504,36 +512,37 @@
           tank.healthBar.texture = this.texture['lifeG' + tank.live + '.png'];
       },
       TankDead: function (tank) {
+        this.destroyAnimate(tank.x,tank.y,1);
         tank.x = -1000;
         tank.y = -1000;
         tank.visible = false;
-        if(tank.name === this.id) {
+        if (tank.name === this.id) {
           this.isDead = true;
           this.StartCountdown(tank);
         }
       },
       StartCountdown: function (tank) {
         if (this.countdown === 0) {
-          this.socket.emit('tankResurgence',{
-            'name' : tank.name
+          this.socket.emit('tankResurgence', {
+            'name': tank.name
           });
           return;
         }
-        setTimeout(()=>{
+        setTimeout(() => {
           this.countdown--;
 
           this.StartCountdown(tank);
         }, 1000);
       },
-      TankResurgence: function(msg){
+      TankResurgence: function (msg) {
         let tanks = this.TankSprite.children;
         let tank = {};
-        for(let i = 0; i < tanks.length; i++){
-          if(tanks[i].name === msg.name ){
+        for (let i = 0; i < tanks.length; i++) {
+          if (tanks[i].name === msg.name) {
             tank = tanks[i]
           }
         }
-        if(tank.name === this.id) {
+        if (tank.name === this.id) {
           this.isDead = false;
           this.gameContainer.x = this.gameContainer.initX;
           this.gameContainer.y = this.gameContainer.initY;
@@ -551,6 +560,7 @@
       },
       WallHited: function (level, wall) {
         if (wall.level <= level) {
+          this.destroyAnimate(wall.x,wall.y,0);
           wall.destroy();
         }
       },
@@ -707,6 +717,31 @@
         );
         return key;
       },
+      destroyAnimate: function (x, y, type) {
+        let alienImages;
+        if (type === 0)
+          alienImages = ["111.png", "333.png", "222.png"];
+        else
+          alienImages = ["111.png", "222.png", "333.png", "444.png", "555.png", "333.png", "111.png",];
+        let textureArray = [];
+        let textures = this.texture;
+        for (let i = 0; i < alienImages.length; i++) {
+          textureArray.push(textures[alienImages[i]]);
+        }
+        let mc = new pixi.extras.AnimatedSprite(textureArray);
+        mc.x = x;
+        mc.y = y;
+        mc.height = mc.width = this.BlockUnit / 3;
+        mc.anchor.set(0.5, 0.5);
+        mc.loop = false;
+        mc.animationSpeed = 0.25;
+        mc.visible = true;
+        this.AnimatedContainer.addChild(mc);
+        mc.play();
+        mc.onComplete = () => {
+          mc.destroy();
+        }
+      },
       on_tank_move: function (msg) {
         let tanks = this.TankSprite.children;
         for (let i = 0; i < tanks.length; i++) {
@@ -790,17 +825,27 @@
       openSimpleDialog: function () {
         this.openSimple = true;
       },
-      closeSimpleDialog: function () {
+      joinRoom: function () {
+        if (this.openSimple === false) {
+          return;
+        }
         this.team = parseInt(this.team);
         this.socket.emit('join', {
           'id': this.id,
           'roomid': this.roomid,
           'team': this.team
         });
-        this.openSimple = false;
+      },
+      createRoom: function () {
+        if (this.openSimple === false) {
+          return;
+        }
+        this.team = parseInt(this.team);
         if (this.isHost) {
-          this.socket.emit('gameStart', {
-            'mapId': this.map
+          this.socket.emit('createRoom', {
+            'id': this.id,
+            'roomid': this.roomid,
+            'team': this.team
           });
         }
       },
@@ -832,14 +877,13 @@
         else
           this.socket.emit('sync_cond', tank);
       },
-      playAgain: function(){
+      playAgain: function () {
         this.isGameover = false;
-        this.app.destroy(true,{
-          'children' : true,
-          'texture' : false,
-          'baseTexture' : false
+        this.app.destroy(true, {
+          'children': true,
+          'texture': false,
+          'baseTexture': false
         });
-
 
         this.team = parseInt(this.team);
         this.socket.emit('join', {
@@ -853,14 +897,39 @@
           });
         }
       },
-      exit: function(){
+      isRoomSuccess: function(msg) {
+        if(this.isHost) {
+          if(msg.isExisted)
+            alert('房间已存在');
+          else
+            this.openSimple = false;
+        }
+        else{
+          if(!msg.isExisted)
+            alert('房间不存在');
+          else
+            this.openSimple = false;
+        }
+      },
+      exit: function () {
         this.isGameover = false;
-        this.app.destroy(true,{
-          'children' : true,
-          'texture' : false,
-          'baseTexture' : false
-        });
+        if(this.app.renderer !== undefined) {
+          this.app.destroy(true, {
+            'children': true,
+            'texture': false,
+            'baseTexture': false
+          });
+        }
         this.openSimple = true;
+      },
+      updateRooms: function(msg){
+        console.log(msg);
+        this.roomOptions = msg.rooms;
+      },
+      gameStart: function(){
+        this.socket.emit('gameStart', {
+          'mapId': this.map
+        });
       }
     },
     mounted() {
@@ -871,7 +940,12 @@
       this.socket.on('gameStart', (msg) => this.Init(msg));
       this.socket.on('ready', (msg) => this.LoadingProgress(msg));
       this.socket.on('tankResurgence', (msg) => this.TankResurgence(msg));
+      this.socket.on('isroomExisted', (msg) => this.isRoomSuccess(msg));
+      this.socket.on('getRooms', (msg) => this.updateRooms(msg));
+      this.socket.on('roomClose', () => this.exit());
 
+
+      this.socket.emit('getRooms');
       this.openSimpleDialog();
     }
   }
